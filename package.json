@@ -1,0 +1,16 @@
+{
+  "name": "pi-minimal",
+  "version": "0.1.0",
+  "description": "Minimalist CLI theme and vim-mode extension for pi coding agent",
+  "type": "module",
+  "keywords": ["pi-package", "pi", "minimal", "vim", "cli", "theme", "extension"],
+  "pi": {
+    "extensions": ["./extensions/index.ts"],
+    "themes": ["./themes/minimal.json"]
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iamcheyan/pi-minimal.git"
+  }
+}
