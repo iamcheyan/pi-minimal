@@ -1,16 +1,18 @@
 # pi-minimal
 
-Minimalist CLI theme and vim-mode extension for [pi](https://github.com/earendil-works/pi-mono) coding agent.
+Minimalist REPL-style extension for [pi](https://github.com/earendil-works/pi-mono) coding agent.
 
-Strips away all decorations for a clean, pure CLI experience with vim-like navigation.
+Clean, pure CLI experience with a styled prompt, colored startup header, and zero decorations.
 
 ## Features
 
-- **Minimal theme** - No backgrounds, borders, or color decorations. Pure text.
-- **Hidden header/footer** - Clean interface without logo, hints, or status bars.
-- **Vim modal editor** - Escape for normal mode, i for insert mode.
-- **j/k scrolling** - Navigate conversation history with j (down) and k (up) in normal mode.
-- **Standard vim keys** - h/l for left/right, 0/$ for line start/end, x for delete, w/b for word navigation.
+- **REPL-style prompt** - `»` prompt prefix at the input line
+- **Colored startup header** - Shows session, model, context, and help in a clean format
+- **Block cursor** - Accent-colored block cursor (blue background) instead of default reverse-video
+- **No borders** - Top and bottom `─` lines removed from the editor
+- **No header/footer** - Clean interface without logo, hints, or status bars
+- **Minimal theme** - All backgrounds, borders, and color decorations stripped out
+- **Auto-setup** - Theme and settings are configured automatically on first run
 
 ## Installation
 
@@ -41,75 +43,44 @@ Add to `~/.pi/agent/settings.json` or `.pi/settings.json`:
 ### One-off: CLI flag
 
 ```bash
-pi --extension /path/to/pi-minimal/extensions/index.ts --theme /path/to/pi-minimal/themes/minimal.json
+pi --extension /path/to/pi-minimal/extensions/index.ts
 ```
-
-## Usage
-
-### Vim Modes
-
-| Mode | Keys | Action |
-|------|------|--------|
-| **INSERT** (default) | Any key | Type normally |
-| **INSERT** | Escape | Switch to NORMAL mode |
-| **NORMAL** | i | Switch to INSERT mode |
-| **NORMAL** | a | Switch to INSERT mode (after cursor) |
-| **NORMAL** | j | Scroll down through conversation |
-| **NORMAL** | k | Scroll up through conversation |
-| **NORMAL** | h/l | Move cursor left/right |
-| **NORMAL** | 0/$ | Jump to line start/end |
-| **NORMAL** | x | Delete character |
-| **NORMAL** | w/b | Jump word forward/backward |
-| **NORMAL** | Escape | Pass through to pi (abort, etc.) |
-
-### Status Indicator
-
-The editor border shows the current mode:
-- `INSERT` - Normal typing mode
-- `NORMAL` - Vim navigation mode
 
 ## How It Works
 
-The extension:
-1. Applies the `minimal` theme which sets all background and border colors to empty
-2. Hides the header and footer components
-3. Replaces the default editor with a vim-modal editor
-4. Handles j/k input in normal mode to scroll the terminal viewport
+The extension on startup:
 
-## Customization
+1. **Installs theme** - Copies `minimal.json` to `~/.pi/agent/themes/` if not present
+2. **Sets quietStartup** - Writes `quietStartup: true` to `~/.pi/agent/settings.json` to suppress the verbose resource listing
+3. **Replaces header** - Shows a colored `pi-repl` welcome block with session info
+4. **Hides footer** - Removes the status bar
+5. **Replaces editor** - Adds `»` prompt prefix, removes border lines, styles cursor
 
-### Changing scroll amount
+## Startup Output
 
-Edit the `scrollDown()` and `scrollUp()` methods in `extensions/index.ts` to use different ANSI sequences:
+```
+pi-repl
+  Session: ses_019e6491-7201-7b74-928d-
+  Model:   gpt-5.4-mini
+  Context: ~/Development/pi on main
+  Type /help for commands, Ctrl+C to interrupt, /exit to quit
 
-```typescript
-// Scroll by 3 lines instead of 1
-private scrollDown(): void {
-  process.stdout.write("\x1b[3;5T") // Scroll down 3 lines
-}
-
-private scrollUp(): void {
-  process.stdout.write("\x1b[3;5S") // Scroll up 3 lines
-}
+» _
 ```
 
-### Adding more vim keys
+## Theme
 
-Add key mappings to the `NORMAL_KEYS` object in `extensions/index.ts`:
+The `minimal.json` theme sets all background and border colors to empty strings, stripping away every visual decoration. The extension automatically installs it to `~/.pi/agent/themes/` on first run.
 
-```typescript
-const NORMAL_KEYS: Record<string, string | null> = {
-  // ... existing keys
-  gg: "\x1b[H", // go to top (Home)
-  G: "\x1b[F", // go to bottom (End)
-}
-```
+## Files
+
+- `extensions/index.ts` - Main extension code (editor, header, cursor styling)
+- `themes/minimal.json` - Minimal theme definition
 
 ## Compatibility
 
 - Requires pi v0.75.0 or later
 - Uses `CustomEditor` from `@earendil-works/pi-coding-agent`
-- Terminal must support ANSI escape sequences for scrolling
 
 ## License
 
