@@ -8,6 +8,9 @@
  * - Hidden header and footer for clean CLI feel
  */
 
+import { readFileSync, existsSync, copyFileSync, mkdirSync } from "node:fs"
+import { join, dirname } from "node:path"
+import { homedir } from "node:os"
 import { CustomEditor, type ExtensionAPI } from "@earendil-works/pi-coding-agent"
 import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui"
 import type { KeybindingsManager } from "@earendil-works/pi-coding-agent"
@@ -29,7 +32,6 @@ const NORMAL_KEYS: Record<string, string | null> = {
 
 class MinimalEditor extends CustomEditor {
   private mode: "normal" | "insert" = "insert"
-  private scrollOffset = 0
 
   constructor(
     tui: any,
@@ -88,12 +90,10 @@ class MinimalEditor extends CustomEditor {
   }
 
   private scrollDown(): void {
-    // Send PageDown sequence to scroll terminal viewport
     process.stdout.write("\x1b[6~")
   }
 
   private scrollUp(): void {
-    // Send PageUp sequence to scroll terminal viewport
     process.stdout.write("\x1b[5~")
   }
 
@@ -111,24 +111,53 @@ class MinimalEditor extends CustomEditor {
   }
 }
 
-export default function (pi: ExtensionAPI) {
-  // Apply minimal theme
-  pi.on("session_start", (_event, ctx) => {
-    ctx.ui.setTheme("minimal")
+function ensureThemeInstalled(): void {
+  const themesDir = join(homedir(), ".pi", "agent", "themes")
+  const targetPath = join(themesDir, "minimal.json")
+  if (existsSync(targetPath)) return
 
+  // Find the theme file relative to this extension
+  const extensionDir = dirname(new URL(import.meta.url).pathname)
+  const sourcePath = join(extensionDir, "..", "themes", "minimal.json")
+
+  if (!existsSync(sourcePath)) return
+
+  try {
+    mkdirSync(themesDir, { recursive: true })
+    copyFileSync(sourcePath, targetPath)
+  } catch {
+    // Ignore copy errors - theme might be installed manually
+  }
+}
+
+export default function (pi: ExtensionAPI) {
+  ensureThemeInstalled()
+
+  pi.on("session_start", (_event, ctx) => {
     // Hide header
-    ctx.ui.setHeader(() => ({
-      render: () => [],
-      invalidate: () => {},
-    }))
+    try {
+      ctx.ui.setHeader(() => ({
+        render: () => [],
+        invalidate: () => {},
+      }))
+    } catch {}
 
     // Hide footer
-    ctx.ui.setFooter(() => ({
-      render: () => [],
-      invalidate: () => {},
-    }))
+    try {
+      ctx.ui.setFooter(() => ({
+        render: () => [],
+        invalidate: () => {},
+      }))
+    } catch {}
 
     // Replace editor with minimal vim-mode editor
-    ctx.ui.setEditorComponent((tui, theme, kb) => new MinimalEditor(tui, theme, kb))
+    try {
+      ctx.ui.setEditorComponent((tui, theme, kb) => new MinimalEditor(tui, theme, kb))
+    } catch {}
+
+    // Apply minimal theme (do last - may fail if not installed)
+    try {
+      ctx.ui.setTheme("minimal")
+    } catch {}
   })
 }
