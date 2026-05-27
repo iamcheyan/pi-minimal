@@ -10,7 +10,7 @@
     "red": "#cc6666",
     "yellow": "#e8e8e8",
     "cyan": "#e8e8e8",
-    "blue": "#e8e8e8"
+    "blue": "#80a0f0"
   },
   "colors": {
     "accent": "text",
@@ -27,7 +27,7 @@
 
     "selectedBg": "",
     "userMessageBg": "",
-    "userMessageText": "text",
+    "userMessageText": "blue",
     "customMessageBg": "",
     "customMessageText": "text",
     "customMessageLabel": "gray",

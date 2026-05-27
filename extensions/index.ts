@@ -10,7 +10,7 @@
  */
 
 import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import { join, basename, dirname } from "node:path"
+import { join, dirname } from "node:path"
 import { homedir } from "node:os"
 import { CustomEditor, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent"
 import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui"
@@ -21,6 +21,70 @@ import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/p
 
 const PROMPT = "» "
 const PROMPT_WIDTH = visibleWidth(PROMPT)
+const OSC133_ZONE_START = "\x1b]133;A\x07"
+const OSC133_ZONE_END = "\x1b]133;B\x07"
+const OSC133_ZONE_FINAL = "\x1b]133;C\x07"
+
+type Renderable = Component & {
+  render: (width: number) => string[]
+}
+
+function isRenderable(value: unknown): value is Renderable {
+  return typeof value === "object" && value !== null && "render" in value
+}
+
+function isMessageStartLine(line: string | undefined): boolean {
+  return line?.includes(OSC133_ZONE_START) === true
+}
+
+function isMessageEndLine(line: string | undefined): boolean {
+  return line?.includes(OSC133_ZONE_END) === true || line?.includes(OSC133_ZONE_FINAL) === true
+}
+
+function isVisualBlankLine(line: string): boolean {
+  return line
+    .replace(/\x1b\][^\x07]*\x07/g, "")
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\x1b_pi:c\x07/g, "")
+    .trim().length === 0
+}
+
+function compactMessageSpacing(lines: string[]): string[] {
+  const compacted: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (!isVisualBlankLine(line)) {
+      compacted.push(line)
+      continue
+    }
+
+    let end = i
+    while (end + 1 < lines.length && isVisualBlankLine(lines[end + 1])) {
+      end++
+    }
+
+    const previousLine = compacted[compacted.length - 1]
+    const nextLine = lines[end + 1]
+    const blankLines = lines.slice(i, end + 1)
+    const hasMessageMarker = blankLines.some((blankLine) => isMessageStartLine(blankLine) || isMessageEndLine(blankLine))
+    if (!hasMessageMarker && !isMessageEndLine(previousLine) && !isMessageStartLine(nextLine)) {
+      compacted.push(...blankLines)
+    }
+    i = end
+  }
+  return compacted
+}
+
+function installChatSpacingPatch(tui: unknown): void {
+  if (!isRenderable(tui)) return
+
+  const target = tui as Renderable & { __piMinimalSpacingPatched?: boolean }
+  if (target.__piMinimalSpacingPatched) return
+
+  const originalRender = target.render.bind(target)
+  target.render = (width: number): string[] => compactMessageSpacing(originalRender(width))
+  target.__piMinimalSpacingPatched = true
+}
 
 // ============================================================================
 // Minimal Editor with REPL prompt
@@ -28,38 +92,12 @@ const PROMPT_WIDTH = visibleWidth(PROMPT)
 
 class MinimalEditor extends CustomEditor {
   constructor(
-    tui: any,
-    theme: any,
-    kb: any,
-    options?: any,
+    tui: ConstructorParameters<typeof CustomEditor>[0],
+    theme: ConstructorParameters<typeof CustomEditor>[1],
+    kb: ConstructorParameters<typeof CustomEditor>[2],
+    options?: ConstructorParameters<typeof CustomEditor>[3],
   ) {
     super(tui, theme, kb, options)
-
-    // Suppress verbose startup resource listing in chatContainer
-    try {
-      // TUI children: [headerContainer, chatContainer, pendingMessagesContainer, ...]
-      // We look for the Container child that holds chat messages
-      const chatContainer = tui.children.find(
-        (c: any) => c.constructor.name === "Container" && c !== tui
-      )
-      if (chatContainer) {
-        const originalAddChild = chatContainer.addChild
-        let allowAdd = false
-
-        chatContainer.addChild = function (child: any) {
-          if (allowAdd) {
-            originalAddChild.call(this, child)
-          }
-        }
-
-        // Enable additions after the startup phase is complete (100ms is perfect)
-        setTimeout(() => {
-          allowAdd = true
-        }, 100)
-      }
-    } catch {
-      // Fallback: ignore errors if TUI internal layout changes
-    }
   }
 
   render(width: number): string[] {
@@ -77,7 +115,7 @@ class MinimalEditor extends CustomEditor {
     const available = width - PROMPT_WIDTH
     return content.map((line, i) => {
       // Style cursor: reverse video → accent-colored block
-      let styled = line
+      const styled = line
         .replace(/\x1b\[7m \x1b\[0m/g, "\x1b[48;2;80;160;240m \x1b[0m")
         .replace(/\x1b\[7m([^\x1b])\x1b\[0m/g, "\x1b[48;2;80;160;240;97m$1\x1b[0m")
 
@@ -153,24 +191,26 @@ function ensureInstalled(): void {
   const themesDir = join(agentDir, "themes")
   const targetPath = join(themesDir, "minimal.json")
 
-  // 1. Install theme if not present
-  if (!existsSync(targetPath)) {
-    const extensionDir = dirname(new URL(import.meta.url).pathname)
-    const sourcePath = join(extensionDir, "..", "themes", "minimal.json")
-    if (existsSync(sourcePath)) {
-      try {
-        mkdirSync(themesDir, { recursive: true })
+  // 1. Install or refresh the bundled theme
+  const extensionDir = dirname(new URL(import.meta.url).pathname)
+  const sourcePath = join(extensionDir, "..", "themes", "minimal.json")
+  if (existsSync(sourcePath)) {
+    try {
+      mkdirSync(themesDir, { recursive: true })
+      const source = readFileSync(sourcePath, "utf-8")
+      const target = existsSync(targetPath) ? readFileSync(targetPath, "utf-8") : ""
+      if (source !== target) {
         copyFileSync(sourcePath, targetPath)
-      } catch {
-        // Ignore copy errors
       }
+    } catch {
+      // Ignore copy errors
     }
   }
 
   // 2. Configure quietStartup in settings.json to hide verbose list
   const settingsPath = join(agentDir, "settings.json")
   try {
-    let settings: Record<string, any> = {}
+    let settings: Record<string, unknown> = {}
     if (existsSync(settingsPath)) {
       settings = JSON.parse(readFileSync(settingsPath, "utf-8"))
     }
@@ -193,7 +233,10 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", (_event, ctx) => {
     // Set custom header with REPL welcome info
     try {
-      ctx.ui.setHeader(() => createStartupHeader(ctx))
+      ctx.ui.setHeader((tui) => {
+        installChatSpacingPatch(tui)
+        return createStartupHeader(ctx)
+      })
     } catch {}
 
     // Hide footer
