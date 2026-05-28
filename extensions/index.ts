@@ -19,7 +19,7 @@ import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/p
 // Constants
 // ============================================================================
 
-const PROMPT = "» "
+const PROMPT = `[1;36m»[0m `
 const PROMPT_WIDTH = visibleWidth(PROMPT)
 const OSC133_ZONE_START = "\x1b]133;A\x07"
 const OSC133_ZONE_END = "\x1b]133;B\x07"
@@ -51,27 +51,21 @@ function isVisualBlankLine(line: string): boolean {
 
 function compactMessageSpacing(lines: string[]): string[] {
   const compacted: string[] = []
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (!isVisualBlankLine(line)) {
+  let consecutiveBlanks = 0
+
+  for (const line of lines) {
+    if (isVisualBlankLine(line)) {
+      consecutiveBlanks++
+      // Keep only the first blank line in any sequence
+      if (consecutiveBlanks <= 1) {
+        compacted.push(line)
+      }
+    } else {
+      consecutiveBlanks = 0
       compacted.push(line)
-      continue
     }
-
-    let end = i
-    while (end + 1 < lines.length && isVisualBlankLine(lines[end + 1])) {
-      end++
-    }
-
-    const previousLine = compacted[compacted.length - 1]
-    const nextLine = lines[end + 1]
-    const blankLines = lines.slice(i, end + 1)
-    const hasMessageMarker = blankLines.some((blankLine) => isMessageStartLine(blankLine) || isMessageEndLine(blankLine))
-    if (!hasMessageMarker && !isMessageEndLine(previousLine) && !isMessageStartLine(nextLine)) {
-      compacted.push(...blankLines)
-    }
-    i = end
   }
+
   return compacted
 }
 
@@ -162,16 +156,17 @@ function createStartupHeader(ctx: ExtensionContext): Component {
 
   return {
     render(width: number): string[] {
-      // Colors: title=bold cyan, labels=bold, values=dim
+      // Colors: title=bold cyan, labels=bold white, values=dim, branch=cyan
       const t = (s: string) => `\x1b[1;36m${s}\x1b[0m`  // bold cyan
       const l = (s: string) => `\x1b[1m${s}\x1b[0m`      // bold
       const v = (s: string) => `\x1b[2m${s}\x1b[0m`      // dim
+      const c = (s: string) => `\x1b[36m${s}\x1b[0m`    // cyan
 
       const lines: string[] = [
         t("pi-repl"),
         `  ${l("Session:")} ${v(session)}`,
-        `  ${l("Model:")}   ${v(modelId)}`,
-        `  ${l("Context:")} ${v(formattedCwd + " on " + branch)}`,
+        `  ${l("Model:")}   ${c(modelId)}`,
+        `  ${l("Context:")} ${v(formattedCwd)} ${v("on")} ${c(branch)}`,
         `  ${v("Type /help for commands, Ctrl+C to interrupt, /exit to quit")}`,
         ""
       ]
