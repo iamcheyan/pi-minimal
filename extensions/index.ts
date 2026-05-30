@@ -163,7 +163,6 @@ function createStartupHeader(ctx: ExtensionContext): Component {
       const c = (s: string) => `\x1b[36m${s}\x1b[0m`    // cyan
 
       const lines: string[] = [
-        t("pi-repl"),
         `  ${l("Session:")} ${v(session)}`,
         `  ${l("Model:")}   ${c(modelId)}`,
         `  ${l("Context:")} ${v(formattedCwd)} ${v("on")} ${c(branch)}`,
