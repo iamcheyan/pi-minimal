@@ -227,13 +227,18 @@ export default function (pi: ExtensionAPI) {
   const minimalEditorFactory = (tui: ConstructorParameters<typeof MinimalEditor>[0], theme: ConstructorParameters<typeof MinimalEditor>[1], kb: ConstructorParameters<typeof MinimalEditor>[2]) =>
     new MinimalEditor(tui, theme, kb)
 
-  const applyMinimalEditor = (ctx: Parameters<Parameters<typeof pi.on>[1]>[1]) => {
-    try {
-      ctx.ui.setEditorComponent(minimalEditorFactory)
-    } catch {}
-  }
-
   pi.on("session_start", (_event, ctx) => {
+    // Intercept setEditorComponent to automatically enforce MinimalEditor when a reset (undefined) is requested.
+    // This cleanly handles resets from other extensions (like pi-ralph) during session startup and at turn ends.
+    const originalSetEditorComponent = ctx.ui.setEditorComponent.bind(ctx.ui)
+    ctx.ui.setEditorComponent = (factory) => {
+      if (factory === undefined) {
+        originalSetEditorComponent(minimalEditorFactory)
+      } else {
+        originalSetEditorComponent(factory)
+      }
+    }
+
     // Set custom header with REPL welcome info
     try {
       ctx.ui.setHeader((tui) => {
@@ -250,21 +255,12 @@ export default function (pi: ExtensionAPI) {
       }))
     } catch {}
 
-    // Replace editor with minimal REPL-style editor
-    applyMinimalEditor(ctx)
+    // Initially apply the minimal editor
+    ctx.ui.setEditorComponent(minimalEditorFactory)
 
     // Apply minimal theme
     try {
       ctx.ui.setTheme("minimal")
     } catch {}
-  })
-
-  // Re-apply the borderless editor after each agent turn ends.
-  // pi-ralph calls setEditorComponent(undefined) when it finishes a turn,
-  // which restores the default bordered editor. We override that here.
-  pi.on("agent_end", (_event, ctx) => {
-    if (ctx.ui.getEditorComponent() === undefined) {
-      applyMinimalEditor(ctx)
-    }
   })
 }
